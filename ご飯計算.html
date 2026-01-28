@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ご飯・お米量計算（家族用）</title>
+  <style>
+    :root { --pad: 14px; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+      margin: 0;
+      background: #f7f7f7;
+      color: #111;
+    }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 20px; margin: 8px 0 14px; }
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.06);
+      margin-bottom: 12px;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    label { display: block; font-size: 13px; margin-bottom: 6px; color: #333; }
+    input {
+      width: 100%;
+      font-size: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    input:focus { outline: 2px solid rgba(0, 0, 0, 0.15); border-color: #bbb; }
+    .btnrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    button {
+      width: 100%;
+      padding: 12px;
+      border: 0;
+      border-radius: 12px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .primary { background: #111; color: #fff; }
+    .ghost { background: #eaeaea; color: #111; }
+    .result {
+      font-size: 18px;
+      line-height: 1.7;
+    }
+    .muted { color: #555; font-size: 12px; margin-top: 8px; }
+    .err { color: #b00020; font-size: 13px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ご飯・お米量計算（家族用）</h1>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div style="font-weight:600;">設定（保存されます）</div>
+        <button class="ghost" type="button" onclick="resetSettings()">設定リセット</button>
+      </div>
+      <div class="grid" style="margin-top:10px;">
+        <div>
+          <label for="gohanPerGo">1合あたりのご飯量 (g)</label>
+          <input id="gohanPerGo" type="number" inputmode="decimal" min="1" step="1" />
+        </div>
+        <div>
+          <label for="ricePerGo">1合あたりのお米量 (g)</label>
+          <input id="ricePerGo" type="number" inputmode="decimal" min="1" step="1" />
+        </div>
+      </div>
+      <div class="muted">※ 合とkgは「小数点第2位で切り上げ」表示</div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:600; margin-bottom:10px;">入力</div>
+      <div class="grid">
+        <div>
+          <label for="adultG">大人1人のご飯量 (g)</label>
+          <input id="adultG" type="number" inputmode="decimal" min="0" step="1" placeholder="例：180" />
+        </div>
+        <div>
+          <label for="adultCount">大人の人数</label>
+          <input id="adultCount" type="number" inputmode="numeric" min="0" step="1" placeholder="例：2" />
+        </div>
+        <div>
+          <label for="childG">子ども1人のご飯量 (g)</label>
+          <input id="childG" type="number" inputmode="decimal" min="0" step="1" placeholder="例：120" />
+        </div>
+        <div>
+          <label for="childCount">子どもの人数</label>
+          <input id="childCount" type="number" inputmode="numeric" min="0" step="1" placeholder="例：1" />
+        </div>
+      </div>
+
+      <div class="btnrow">
+        <button class="primary" type="button" onclick="calculate()">計算する</button>
+        <button class="ghost" type="button" onclick="clearInputs()">入力クリア</button>
+      </div>
+
+      <div id="error" class="err" style="display:none;"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:600; margin-bottom:10px;">結果</div>
+      <div id="result" class="result">—</div>
+      <div class="muted" id="detail"></div>
+    </div>
+  </div>
+
+  <script>
+    const LS_KEY = "family_rice_calc_settings_v1";
+
+    function ceil2(x) {
+      // 小数点第2位で切り上げ（= 0.01単位で切り上げ）
+      return Math.ceil(x * 100) / 100;
+    }
+
+    function showError(msg) {
+      const el = document.getElementById("error");
+      el.textContent = msg;
+      el.style.display = msg ? "block" : "none";
+    }
+
+    function loadSettings() {
+      const saved = localStorage.getItem(LS_KEY);
+      let gohanPerGo = 330;
+      let ricePerGo = 150;
+
+      if (saved) {
+        try {
+          const obj = JSON.parse(saved);
+          if (Number(obj.gohanPerGo) > 0) gohanPerGo = Number(obj.gohanPerGo);
+          if (Number(obj.ricePerGo) > 0) ricePerGo = Number(obj.ricePerGo);
+        } catch {}
+      }
+
+      document.getElementById("gohanPerGo").value = gohanPerGo;
+      document.getElementById("ricePerGo").value = ricePerGo;
+    }
+
+    function saveSettings() {
+      const gohanPerGo = Number(document.getElementById("gohanPerGo").value);
+      const ricePerGo = Number(document.getElementById("ricePerGo").value);
+
+      if (gohanPerGo > 0 && ricePerGo > 0) {
+        localStorage.setItem(LS_KEY, JSON.stringify({ gohanPerGo, ricePerGo }));
+      }
+    }
+
+    function resetSettings() {
+      localStorage.removeItem(LS_KEY);
+      loadSettings();
+      showError("");
+    }
+
+    function clearInputs() {
+      ["adultG","adultCount","childG","childCount"].forEach(id => {
+        document.getElementById(id).value = "";
+      });
+      document.getElementById("result").textContent = "—";
+      document.getElementById("detail").textContent = "";
+      showError("");
+    }
+
+    function getNum(id) {
+      const v = document.getElementById(id).value;
+      return v === "" ? null : Number(v);
+    }
+
+    function calculate() {
+      showError("");
+      saveSettings();
+
+      const adultG = getNum("adultG");
+      const adultCount = getNum("adultCount");
+      const childG = getNum("childG");
+      const childCount = getNum("childCount");
+      const gohanPerGo = Number(document.getElementById("gohanPerGo").value);
+      const ricePerGo = Number(document.getElementById("ricePerGo").value);
+
+      // 入力チェック（家族用なので優しめに）
+      if (!(gohanPerGo > 0) || !(ricePerGo > 0)) {
+        return showError("設定値（1合あたりのご飯量／お米量）を正しく入力してください。");
+      }
+      if ([adultG,adultCount,childG,childCount].some(v => v === null)) {
+        return showError("入力欄をすべて埋めてください（0でもOK）。");
+      }
+      if ([adultG,adultCount,childG,childCount].some(v => v < 0)) {
+        return showError("マイナスの値は使えません。");
+      }
+      if (!Number.isInteger(adultCount) || !Number.isInteger(childCount)) {
+        return showError("人数は整数で入力してください。");
+      }
+
+      const adultTotalG = adultG * adultCount;
+      const childTotalG = childG * childCount;
+      const totalG = adultTotalG + childTotalG;
+
+      const totalGo = ceil2(totalG / gohanPerGo);
+      const riceKg = ceil2((totalGo * ricePerGo) / 1000);
+
+      document.getElementById("result").innerHTML =
+        `合計のご飯量：<b>${totalGo}</b> 合<br>` +
+        `必要なお米量：<b>${riceKg}</b> kg`;
+
+      document.getElementById("detail").textContent =
+        `内訳：大人 ${adultTotalG}g ＋ 子ども ${childTotalG}g ＝ 合計 ${totalG}g`;
+    }
+
+    // 設定が変わったら即保存
+    ["gohanPerGo","ricePerGo"].forEach(id => {
+      document.getElementById(id).addEventListener("change", saveSettings);
+    });
+
+    loadSettings();
+  </script>
+</body>
+</html>
